@@ -13,10 +13,10 @@ export function Slider({
   const [value, setValue] = useState(component.defaultValue ?? component.min);
 
   return (
-    <div style={{ border: "1px solid #dfe7f5", borderRadius: 16, padding: 16, display: "grid", gap: 8 }}>
-      <div style={{ display: "flex", justifyContent: "space-between" }}>
+    <div style={{ border: "1px solid var(--line)", borderRadius: 16, padding: 16, display: "grid", gap: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", color: "var(--ink)" }}>
         <strong>{component.label}</strong>
-        <span style={{ color: "#0f172a", fontWeight: 700 }}>
+        <span style={{ color: "var(--garnet)", fontWeight: 700 }}>
           {value}
           {component.unit ? ` ${component.unit}` : ""}
         </span>
@@ -30,7 +30,7 @@ export function Slider({
         onChange={(event) => setValue(Number(event.target.value))}
         onPointerUp={() => onAction?.(component.id, value)}
         onKeyUp={() => onAction?.(component.id, value)}
-        style={{ width: "100%" }}
+        style={{ width: "100%", accentColor: "var(--garnet)" }}
       />
     </div>
   );

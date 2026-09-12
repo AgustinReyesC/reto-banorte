@@ -8,13 +8,13 @@ function formatCell(cell: string | number): string {
 
 export function SummaryTable({ component }: { component: ComponentOfType<"summary_table"> }) {
   return (
-    <div style={{ border: "1px solid #dfe7f5", borderRadius: 16, padding: 16, display: "grid", gap: 12, overflowX: "auto" }}>
-      {component.title ? <strong>{component.title}</strong> : null}
+    <div style={{ border: "1px solid var(--line)", borderRadius: 16, padding: 16, display: "grid", gap: 12, overflowX: "auto" }}>
+      {component.title ? <strong style={{ color: "var(--ink)" }}>{component.title}</strong> : null}
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
         <thead>
           <tr>
             {component.columns.map((column) => (
-              <th key={column} style={{ textAlign: "left", padding: "8px 10px", borderBottom: "1px solid #e2e8f0", color: "#475569" }}>
+              <th key={column} style={{ textAlign: "left", padding: "8px 10px", borderBottom: "1px solid var(--line)", color: "var(--ink-soft)" }}>
                 {column}
               </th>
             ))}
@@ -24,7 +24,7 @@ export function SummaryTable({ component }: { component: ComponentOfType<"summar
           {component.rows.map((row, rowIndex) => (
             <tr key={rowIndex}>
               {row.map((cell, cellIndex) => (
-                <td key={cellIndex} style={{ padding: "8px 10px", borderBottom: "1px solid #f1f5f9", color: "#0f172a" }}>
+                <td key={cellIndex} style={{ padding: "8px 10px", borderBottom: "1px solid var(--line)", color: "var(--ink)", fontVariantNumeric: "tabular-nums" }}>
                   {formatCell(cell)}
                 </td>
               ))}

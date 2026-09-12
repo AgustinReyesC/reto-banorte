@@ -6,25 +6,25 @@ export function BreakdownChart({ component }: { component: ComponentOfType<"brea
   const max = Math.max(...component.segments.map((segment) => segment.value), 1);
 
   return (
-    <div style={{ border: "1px solid #dfe7f5", borderRadius: 16, padding: 16, display: "grid", gap: 12 }}>
-      {component.title ? <strong>{component.title}</strong> : null}
+    <div style={{ border: "1px solid var(--line)", borderRadius: 16, padding: 16, display: "grid", gap: 12 }}>
+      {component.title ? <strong style={{ color: "var(--ink)" }}>{component.title}</strong> : null}
       <div style={{ display: "grid", gap: 10 }}>
         {component.segments.map((segment) => {
           const percentage = segment.percentage ?? (total > 0 ? (segment.value / total) * 100 : 0);
           return (
             <div key={segment.label} style={{ display: "grid", gap: 4 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--ink)" }}>
                 <span style={{ textTransform: "capitalize" }}>{segment.label}</span>
-                <span style={{ color: "#475569" }}>
+                <span style={{ color: "var(--ink-soft)" }}>
                   {currency(segment.value)} · {percentage.toFixed(0)}%
                 </span>
               </div>
-              <div style={{ background: "#e2e8f0", height: 10, borderRadius: 999, overflow: "hidden" }}>
+              <div style={{ background: "var(--line)", height: 10, borderRadius: 999, overflow: "hidden" }}>
                 <div
                   style={{
                     width: `${(segment.value / max) * 100}%`,
                     height: "100%",
-                    background: "linear-gradient(90deg, #2563eb, #38bdf8)",
+                    background: "var(--garnet)",
                     borderRadius: 999,
                   }}
                 />
@@ -33,7 +33,7 @@ export function BreakdownChart({ component }: { component: ComponentOfType<"brea
           );
         })}
       </div>
-      {component.unit ? <div style={{ color: "#475569", fontSize: 12 }}>Unidad: {component.unit}</div> : null}
+      {component.unit ? <div style={{ color: "var(--ink-faint)", fontSize: 12 }}>Unidad: {component.unit}</div> : null}
     </div>
   );
 }

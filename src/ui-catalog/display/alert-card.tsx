@@ -23,7 +23,7 @@ export function AlertCard({ component }: { component: ComponentOfType<"alert_car
       }}
     >
       <strong style={{ color: tone.accent }}>{component.title}</strong>
-      <div style={{ color: "#334155", lineHeight: 1.5 }}>{component.message}</div>
+      <div style={{ color: "var(--ink-soft)", lineHeight: 1.5 }}>{component.message}</div>
     </div>
   );
 }

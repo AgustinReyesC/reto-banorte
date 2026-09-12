@@ -20,21 +20,21 @@ export function TrendChart({ component }: { component: ComponentOfType<"trend_ch
   }));
 
   return (
-    <div style={{ border: "1px solid #dfe7f5", borderRadius: 16, padding: 16, display: "grid", gap: 8 }}>
-      {component.title ? <strong>{component.title}</strong> : null}
+    <div style={{ border: "1px solid var(--line)", borderRadius: 16, padding: 16, display: "grid", gap: 8 }}>
+      {component.title ? <strong style={{ color: "var(--ink)" }}>{component.title}</strong> : null}
       <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} width="100%" height={HEIGHT} role="img" aria-label={component.title ?? "Tendencia"}>
-        <line x1={PAD} y1={HEIGHT - PAD} x2={WIDTH - PAD} y2={HEIGHT - PAD} stroke="#cbd5e1" strokeWidth={1} />
-        <polyline points={coords.map((c) => `${c.x},${c.y}`).join(" ")} fill="none" stroke="#2563eb" strokeWidth={2} />
+        <line x1={PAD} y1={HEIGHT - PAD} x2={WIDTH - PAD} y2={HEIGHT - PAD} stroke="var(--line)" strokeWidth={1} />
+        <polyline points={coords.map((c) => `${c.x},${c.y}`).join(" ")} fill="none" stroke="var(--garnet)" strokeWidth={2} />
         {coords.map((c) => (
           <g key={c.label}>
-            <circle cx={c.x} cy={c.y} r={3} fill="#2563eb" />
-            <text x={c.x} y={HEIGHT - 10} textAnchor="middle" fontSize={9} fill="#64748b">
+            <circle cx={c.x} cy={c.y} r={3} fill="var(--garnet)" />
+            <text x={c.x} y={HEIGHT - 10} textAnchor="middle" fontSize={9} fill="var(--ink-faint)">
               {c.label}
             </text>
           </g>
         ))}
       </svg>
-      <div style={{ color: "#475569", fontSize: 12 }}>
+      <div style={{ color: "var(--ink-faint)", fontSize: 12 }}>
         {component.unit ? `Unidad: ${component.unit} · ` : ""}Máx: {currency(max)}
       </div>
     </div>

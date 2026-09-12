@@ -1,0 +1,72 @@
+:root {
+  --garnet: #e1002a;
+  --garnet-deep: #6e0620;
+  --garnet-soft: #fbe4e7;
+  --paper: #f7f2f1;
+  --surface: #ffffff;
+  --surface-sunken: #fbf5f4;
+  --ink: #26161a;
+  --ink-soft: #6b5457;
+  --ink-faint: #a9898c;
+  --line: #eededc;
+  --gain: #157f53;
+  --gain-soft: #e4f4ec;
+  --gold: #a9762f;
+  --focus-ring: #6e0620;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --garnet: #ff3b5c;
+    --garnet-deep: #c4123b;
+    --garnet-soft: #3a1620;
+    --paper: #140b0d;
+    --surface: #211217;
+    --surface-sunken: #2a171c;
+    --ink: #f5e9e8;
+    --ink-soft: #b79a9c;
+    --ink-faint: #7c6265;
+    --line: #3d2226;
+    --gain: #3ecb8c;
+    --gain-soft: #17301f;
+    --gold: #d8a24c;
+    --focus-ring: #ff8fa3;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input {
+  font-family: inherit;
+  color: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

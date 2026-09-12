@@ -13,8 +13,8 @@ export function NumberInputDialog({
   const [value, setValue] = useState(component.defaultValue ?? component.min ?? 0);
 
   return (
-    <div style={{ border: "1px solid #dfe7f5", borderRadius: 16, padding: 16, display: "grid", gap: 12 }}>
-      <label htmlFor={component.id} style={{ fontWeight: 700 }}>
+    <div style={{ border: "1px solid var(--line)", borderRadius: 16, padding: 16, display: "grid", gap: 12 }}>
+      <label htmlFor={component.id} style={{ fontWeight: 700, color: "var(--ink)" }}>
         {component.label}
       </label>
       <input
@@ -25,12 +25,12 @@ export function NumberInputDialog({
         value={value}
         onChange={(event) => setValue(Number(event.target.value))}
         placeholder={component.placeholder ?? "0"}
-        style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #c9d4ea" }}
+        style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)" }}
       />
       <button
         type="button"
         onClick={() => onAction?.(component.id, value)}
-        style={{ background: "#0f172a", color: "white", borderRadius: 10, padding: "10px 14px", border: "none", cursor: "pointer", fontWeight: 700 }}
+        style={{ background: "var(--garnet)", color: "#fff", borderRadius: 10, padding: "10px 14px", border: "none", cursor: "pointer", fontWeight: 700 }}
       >
         Enviar
       </button>
