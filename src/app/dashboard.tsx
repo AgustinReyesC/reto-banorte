@@ -2,13 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { renderAgentComponent } from "@/ui-catalog/registry";
+import { ScreenCanvas } from "@/app/screen-canvas";
 import { useWidgets } from "@/widgets/use-widgets";
-import type { SavedWidget } from "@/widgets/store";
 import { CardDetailsTile, BalanceTile, QuickActionsTile, type DashboardData } from "@/app/dashboard-widgets";
 import { resolveLayout, rectsOverlap, type GridRect } from "@/app/grid-layout";
 
 const POSITIONS_STORAGE_KEY = "banorte-dashboard-positions";
+const SIZES_STORAGE_KEY = "banorte-dashboard-sizes";
 const COLS = 8;
+const COL_WIDTH = 112;
 const ROW_HEIGHT = 108;
 const GAP = 16;
 
@@ -18,9 +20,14 @@ interface GridItem {
   h: number;
 }
 
-function widgetTitle(summary: SavedWidget["summary"]): string {
-  if (summary.type === "kpi_card" || summary.type === "progress_tracker") return summary.label;
-  return "Resumen";
+/**
+ * Filas que ocupa un widget exportado. Suma una fila extra para el
+ * encabezado y el padding del tile: sin ese margen la grilla interna se
+ * comprime y los componentes (las tarjetas) se recortan.
+ */
+function widgetRows(blocks: { y: number; h: number }[]): number {
+  const contentRows = blocks.reduce((max, block) => Math.max(max, block.y + block.h), 1);
+  return contentRows + 1;
 }
 
 function DragHandle() {
@@ -45,8 +52,10 @@ function Tile({
   headerAction,
   editMode,
   isDragged,
+  isResizing,
   onDragStart,
   onDragEnd,
+  onResizeStart,
   children,
 }: {
   id: string;
@@ -55,16 +64,19 @@ function Tile({
   headerAction?: React.ReactNode;
   editMode: boolean;
   isDragged: boolean;
+  isResizing?: boolean;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
+  onResizeStart?: (event: React.PointerEvent, id: string) => void;
   children: React.ReactNode;
 }) {
   return (
     <div
-      draggable={editMode}
+      draggable={editMode && !isResizing}
       onDragStart={() => onDragStart(id)}
       onDragEnd={onDragEnd}
       style={{
+        position: "relative",
         gridColumn: `${rect.x + 1} / span ${rect.w}`,
         gridRow: `${rect.y + 1} / span ${rect.h}`,
         background: "var(--surface)",
@@ -90,28 +102,55 @@ function Tile({
           {!editMode ? headerAction : null}
         </div>
       ) : null}
-      <div style={{ flex: 1, minHeight: 0 }}>{children}</div>
+      <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>{children}</div>
+      {editMode && onResizeStart ? (
+        <span
+          draggable={false}
+          onPointerDown={(event) => onResizeStart(event, id)}
+          aria-label="Redimensionar"
+          style={{
+            position: "absolute",
+            right: -7,
+            bottom: -7,
+            width: 20,
+            height: 20,
+            borderRadius: 6,
+            border: "2px solid var(--surface)",
+            background: "var(--garnet)",
+            cursor: "nwse-resize",
+            touchAction: "none",
+            zIndex: 2,
+          }}
+        />
+      ) : null}
     </div>
   );
 }
 
 export function Dashboard({ dashboardData, onStartGoal }: { dashboardData: DashboardData; onStartGoal: () => void }) {
-  const { widgets, toggle } = useWidgets();
+  const { widgets, remove } = useWidgets();
   const [editMode, setEditMode] = useState(false);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [previewBox, setPreviewBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [savedPositions, setSavedPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [savedSizes, setSavedSizes] = useState<Record<string, { w: number; h: number }>>({});
+  const [resizing, setResizing] = useState<{ id: string; startX: number; startY: number; rect: GridRect } | null>(null);
+  const [resizeDraft, setResizeDraft] = useState<{ id: string; w: number; h: number } | null>(null);
   const hasLoaded = useRef(false);
   const gridRef = useRef<HTMLDivElement>(null);
+  const layoutRef = useRef<Record<string, GridRect>>({});
+  const resizeDraftRef = useRef<{ id: string; w: number; h: number } | null>(null);
 
   useEffect(() => {
     if (hasLoaded.current) return;
     hasLoaded.current = true;
     try {
-      const raw = window.localStorage.getItem(POSITIONS_STORAGE_KEY);
-      if (raw) setSavedPositions(JSON.parse(raw));
+      const rawPositions = window.localStorage.getItem(POSITIONS_STORAGE_KEY);
+      if (rawPositions) setSavedPositions(JSON.parse(rawPositions));
+      const rawSizes = window.localStorage.getItem(SIZES_STORAGE_KEY);
+      if (rawSizes) setSavedSizes(JSON.parse(rawSizes));
     } catch {
-      // localStorage corrupto: seguimos con posiciones vacías (auto-acomodo)
+      // localStorage corrupto: seguimos con posiciones/tamaños vacíos (auto-acomodo)
     }
   }, []);
 
@@ -123,12 +162,86 @@ export function Dashboard({ dashboardData, onStartGoal }: { dashboardData: Dashb
       { id: "balance", w: 2, h: 2 },
       { id: "quick-actions", w: 2, h: 2 },
       { id: "summary", w: 4, h: 1 },
-      ...widgets.map((w) => ({ id: w.widgetId, w: w.expanded ? 4 : 2, h: w.expanded ? 2 : 1 })),
+      ...widgets.map((w) => {
+        const saved = savedSizes[w.widgetId];
+        return { id: w.widgetId, w: saved?.w ?? w.cols, h: saved?.h ?? widgetRows(w.blocks) };
+      }),
     ],
-    [widgets]
+    [widgets, savedSizes]
   );
 
-  const layout = useMemo(() => resolveLayout(items, savedPositions, COLS), [items, savedPositions]);
+  const layout = useMemo(() => {
+    const resolved = resolveLayout(items, savedPositions, COLS);
+    // Mientras se redimensiona, fijamos el tile en su posición original y
+    // mostramos el tamaño borrador; los demás tiles no se mueven.
+    if (resizing && resizeDraft) {
+      resolved[resizing.id] = {
+        x: resizing.rect.x,
+        y: resizing.rect.y,
+        w: resizeDraft.w,
+        h: resizeDraft.h,
+      };
+    }
+    return resolved;
+  }, [items, savedPositions, resizing, resizeDraft]);
+
+  layoutRef.current = layout;
+  resizeDraftRef.current = resizeDraft;
+
+  function startResize(event: React.PointerEvent, id: string) {
+    const rect = layoutRef.current[id];
+    if (!rect) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setResizing({ id, startX: event.clientX, startY: event.clientY, rect });
+    setResizeDraft({ id, w: rect.w, h: rect.h });
+  }
+
+  useEffect(() => {
+    if (!resizing) return;
+    const active = resizing;
+
+    function onMove(event: PointerEvent) {
+      const box = gridRef.current?.getBoundingClientRect();
+      if (!box) return;
+      const colWidth = (box.width - GAP * (COLS - 1)) / COLS;
+      const dCols = Math.round((event.clientX - active.startX) / (colWidth + GAP));
+      const dRows = Math.round((event.clientY - active.startY) / (ROW_HEIGHT + GAP));
+      // Ancho y alto se ajustan de forma independiente.
+      const w = Math.min(Math.max(active.rect.w + dCols, 1), COLS - active.rect.x);
+      const h = Math.max(active.rect.h + dRows, 1);
+      setResizeDraft({ id: active.id, w, h });
+    }
+
+    function onUp() {
+      const draft = resizeDraftRef.current;
+      if (draft) {
+        const candidate: GridRect = { x: active.rect.x, y: active.rect.y, w: draft.w, h: draft.h };
+        const others = Object.entries(layoutRef.current)
+          .filter(([id]) => id !== active.id)
+          .map(([, rect]) => rect);
+        if (!others.some((rect) => rectsOverlap(candidate, rect))) {
+          setSavedSizes((current) => {
+            const next = { ...current, [active.id]: { w: draft.w, h: draft.h } };
+            window.localStorage.setItem(SIZES_STORAGE_KEY, JSON.stringify(next));
+            return next;
+          });
+        }
+      }
+      resizeDraftRef.current = null;
+      setResizeDraft(null);
+      setResizing(null);
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [resizing]);
 
   /** Convierte una posición de mouse a celda (x, y), y de paso regresa la
    *  medida en px de columna del grid en ese momento (para dibujar la vista
@@ -218,22 +331,24 @@ export function Dashboard({ dashboardData, onStartGoal }: { dashboardData: Dashb
 
       {editMode ? (
         <p style={{ color: "var(--ink-soft)", fontSize: 13, marginTop: -10, marginBottom: 18 }}>
-          Arrastra un widget a cualquier espacio libre de la cuadrícula para moverlo.
+          Arrastra un widget para moverlo y usa la esquina inferior derecha para cambiar su tamaño.
         </p>
       ) : null}
 
-      <div
-        ref={gridRef}
-        onDragOver={handleGridDragOver}
-        onDrop={handleGridDrop}
-        style={{
-          position: "relative",
-          display: "grid",
-          gridTemplateColumns: `repeat(${COLS}, 1fr)`,
-          gridAutoRows: ROW_HEIGHT,
-          gap: GAP,
-        }}
-      >
+      <div style={{ overflowX: "auto", paddingBottom: 4 }}>
+        <div
+          ref={gridRef}
+          onDragOver={handleGridDragOver}
+          onDrop={handleGridDrop}
+          style={{
+            position: "relative",
+            display: "grid",
+            gridTemplateColumns: `repeat(${COLS}, ${COL_WIDTH}px)`,
+            gridAutoRows: ROW_HEIGHT,
+            gap: GAP,
+            width: COLS * COL_WIDTH + (COLS - 1) * GAP,
+          }}
+        >
         {editMode && previewBox ? (
           <div
             aria-hidden
@@ -256,7 +371,15 @@ export function Dashboard({ dashboardData, onStartGoal }: { dashboardData: Dashb
         {items.map((item) => {
           const rect = layout[item.id];
           if (!rect) return null;
-          const tileProps = { id: item.id, rect, editMode, isDragged: draggedId === item.id, onDragStart: setDraggedId, onDragEnd: clearDrag };
+          const tileProps = {
+            id: item.id,
+            rect,
+            editMode,
+            isDragged: draggedId === item.id,
+            isResizing: resizing?.id === item.id,
+            onDragStart: setDraggedId,
+            onDragEnd: clearDrag,
+          };
 
           if (item.id === "card") {
             return (
@@ -291,33 +414,36 @@ export function Dashboard({ dashboardData, onStartGoal }: { dashboardData: Dashb
 
           const widget = widgetsById.get(item.id);
           if (!widget) return null;
-          const detail = widget.detail ?? [];
+          const saved = savedSizes[widget.widgetId];
+          const widgetScaleY = saved ? saved.h / widgetRows(widget.blocks) : 1;
           return (
             <Tile
               key={item.id}
               {...tileProps}
-              title={widgetTitle(widget.summary)}
+              title={widget.title}
+              onResizeStart={startResize}
               headerAction={
                 <button
                   type="button"
-                  onClick={() => toggle(widget.widgetId)}
-                  style={{ background: "none", border: "none", color: "var(--garnet)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+                  onClick={() => remove(widget.widgetId)}
+                  style={{ background: "none", border: "none", color: "var(--ink-faint)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
                 >
-                  {widget.expanded ? "Cerrar" : "Ver detalle"}
+                  Quitar
                 </button>
               }
             >
-              <div style={{ display: "grid", gap: 12, height: "100%" }}>
-                {renderAgentComponent(widget.summary)}
-                {widget.expanded
-                  ? detail.length > 0
-                    ? detail.map((c) => renderAgentComponent(c))
-                    : <p style={{ color: "var(--ink-faint)", fontSize: 13, margin: 0 }}>Sin detalle adicional.</p>
-                  : null}
+              <div style={{ height: "100%", minHeight: 0, overflow: "auto" }}>
+                <ScreenCanvas
+                  blocks={widget.blocks}
+                  cols={widget.cols}
+                  rowHeight={ROW_HEIGHT * widgetScaleY}
+                  editable={false}
+                />
               </div>
             </Tile>
           );
         })}
+        </div>
       </div>
     </div>
   );

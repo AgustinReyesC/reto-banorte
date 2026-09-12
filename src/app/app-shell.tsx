@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Dashboard } from "@/app/dashboard";
-import { AgentChat } from "@/app/agent-chat";
+import { AgentScreenView } from "@/app/agent-screen";
 import type { DashboardData } from "@/app/dashboard-widgets";
 
 type Tab = "inicio" | "agente";
@@ -105,7 +105,12 @@ export function AppShell({ usuarioId, usuarioNombre, dashboardData }: { usuarioI
         {tab === "inicio" ? (
           <Dashboard dashboardData={dashboardData} onStartGoal={() => goToAgentWithPrompt("Quiero crear una meta de ahorro")} />
         ) : (
-          <AgentChat usuarioId={usuarioId} startPrompt={startPrompt} />
+          <AgentScreenView
+            usuarioId={usuarioId}
+            startPrompt={startPrompt}
+            onPromptHandled={() => setStartPrompt(undefined)}
+            onExported={() => setTab("inicio")}
+          />
         )}
       </main>
     </div>

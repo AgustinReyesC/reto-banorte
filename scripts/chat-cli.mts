@@ -75,11 +75,8 @@ async function main() {
     const data = (await res.json()) as ChatResponse;
     history = data.history;
 
-    console.log(`\nagente> ${data.response.reply}`);
-    data.response.components.forEach(printComponent);
-    if (data.response.widget) {
-      console.log(`  [WIDGET actualizado: ${data.response.widget.widgetId}]`);
-    }
+    console.log(`\nagente> [${data.response.title}] ${data.response.reply} (scale ${data.response.scale})`);
+    data.response.blocks.forEach((block) => printComponent(block.component));
     console.log();
   }
 

@@ -19,20 +19,23 @@ function formatCurrency(value: number): string {
 
 export function CardDetailsTile({ holderName }: { holderName: string }) {
   return (
-    <div
-      style={{
-        borderRadius: 16,
-        background: "linear-gradient(135deg, var(--garnet-deep) 0%, var(--garnet) 55%, var(--garnet-deep) 100%)",
-        color: "#fff",
-        padding: "18px 20px",
-        aspectRatio: "1.586 / 1",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
+    <div style={{ height: "100%", display: "flex", alignItems: "center" }}>
+      <div
+        style={{
+          height: "100%",
+          maxWidth: "100%",
+          aspectRatio: "1.586 / 1",
+          borderRadius: 16,
+          background: "linear-gradient(135deg, var(--garnet-deep) 0%, var(--garnet) 55%, var(--garnet-deep) 100%)",
+          color: "#fff",
+          padding: "18px 20px",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
       <div
         aria-hidden
         style={{
@@ -66,6 +69,7 @@ export function CardDetailsTile({ holderName }: { holderName: string }) {
           <p style={{ opacity: 0.7, margin: "0 0 2px", fontSize: 9.5, letterSpacing: "0.06em", textTransform: "uppercase" }}>Vigencia</p>
           <p style={{ textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600, fontSize: 12, margin: 0 }}>09/29</p>
         </div>
+      </div>
       </div>
     </div>
   );

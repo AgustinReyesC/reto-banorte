@@ -1,13 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { listMcpTools, callMcpTool } from "./mcp-client";
-import { AgentUiResponseSchema, type AgentUiResponse, type ChatTurn, type UiInteractionEvent } from "@/schemas/ui-catalog";
+import { AgentScreenSchema, type AgentScreen, type ChatTurn, type UiInteractionEvent } from "@/schemas/ui-catalog";
 
 /**
  * Loop de tool-use: Claude puede llamar cualquiera de las 6 tools del MCP
  * para autocompletar información, o "emit_ui" para responder — nunca texto
  * libre. Garantiza salida estructurada validando emit_ui contra Zod antes
- * de confiar en ella.
+ * de confiar en ella. La respuesta es una "pantalla": bloques del catálogo
+ * con un tamaño de grilla, listos para organizarse y exportarse como widget.
  */
 
 const anthropic = new Anthropic({ timeout: 30_000, maxRetries: 2 });
@@ -18,8 +19,8 @@ const EMIT_UI_TOOL_NAME = "emit_ui";
 
 const DIALOG_TYPES = new Set(["number_input_dialog", "choice_dialog", "confirmation_dialog"]);
 
-function isDialogOnlyTurn(response: AgentUiResponse): boolean {
-  return !response.widget && response.components.every((c) => DIALOG_TYPES.has(c.type));
+function isDialogOnlyTurn(screen: AgentScreen): boolean {
+  return screen.blocks.every((block) => DIALOG_TYPES.has(block.component.type));
 }
 
 function buildSystemPrompt(usuarioId: string, questionsAsked: number): string {
@@ -35,7 +36,26 @@ Hoy es ${hoy}. Cuando llames a una tool que pida "rango" (desde/hasta), usa fech
 
 Usuario actual: ${usuarioId}.
 
+Cada llamada a ${EMIT_UI_TOOL_NAME} devuelve una PANTALLA, no un mensaje de chat:
+- "title": título corto de la pantalla.
+- "reply": una o dos frases de contexto para el usuario.
+- "scale": factor de tamaño del widget (0.5 a 2, normal = 1). Escala proporcionalmente todos los bloques.
+- "exportable": true si la pantalla es un widget que puede guardarse en Inicio; false si es solo un aviso (por ejemplo, una solicitud fuera de alcance).
+- "blocks": los componentes que forman la pantalla. Cada bloque es { id, component, w, h }: "id" único, "component" un objeto del catálogo, y "w" (1-8) / "h" (1-6) su tamaño en celdas de una cuadrícula de 8 columnas. Tú NO eliges la posición: el usuario podrá organizar los bloques y exportar la pantalla como widget. Reparte tamaños razonables (ej. kpi_card 2x1, trend_chart 4x2, progress_tracker 4x1, summary_table 4x2).
+
+Componentes del catálogo (usa solo estos):
+- Diálogos: number_input_dialog {id,label,placeholder?,min?,max?,defaultValue?}, choice_dialog {id,label,options:[{value,label}]}, confirmation_dialog {id,message,confirmLabel,cancelLabel}.
+- Display: kpi_card {label,value,helpText?}, progress_tracker {label,current,target,unit?}, scenario_comparison {scenarios:[{label,aporteMensual,mesesRequeridos,viable}]}, breakdown_chart {title?,unit?,segments:[{label,value,percentage?}]}, trend_chart {title?,unit?,points:[{label,value}]}, summary_table {title?,columns:[...],rows:[[...]]}, slider {id,label,min,max,step?,defaultValue?,unit?}, timeline {title?,items:[{label,detail?}]}, alert_card {title,message,tone?:info|success|warning|danger}, cta_button {id,label,action,payload?}.
+- Fallback: text_block {text}, list_block {items}.
+
+Tamaño del widget:
+- Si pide "hazlo más chico / más compacto / resúmelo / solo lo esencial": resume la pantalla a sus características esenciales. Conserva solo 1 a 3 bloques imprescindibles (típicamente el progress_tracker y los kpi_cards clave) y elimina el detalle secundario (tablas largas, timelines, gráficas, textos de relleno). Puedes bajar un poco "scale" (ej. 0.85) para que quede más compacto.
+- Si pide "hazlo más grande / con más detalle / muéstrame todo": vuelve a agregar los bloques de detalle (proyección, desglose, timeline, tabla) además de los esenciales, y sube "scale" (ej. 1.2).
+- El tamaño siempre se ajusta con "scale" (0.5 a 2, normal = 1), que multiplica w y h de todos los bloques por el mismo factor para conservar la relación de aspecto. Nunca deformes un bloque cambiando "w" y "h" por separado ni con factores distintos.
+
 Caso principal: metas de ahorro. Antes de preguntarle algo al usuario, intenta obtener la información que te falte llamando a las tools del MCP disponibles (ingresos, gastos, meta de ahorro existente). Solo pregúntale al usuario lo que de verdad no puedas inferir de esas tools.
+
+Alcance: solo atiendes temas financieros del usuario (ingresos, gastos, ahorro, metas). Si la solicitud está fuera de alcance, devuelve una pantalla de aviso con un único text_block que lo explique, "exportable": false y sin inventar datos. Marca "exportable": false también para pantallas que solo piden un dato o avisan de un error. Reserva "exportable": true para pantallas que sí son un widget con información financiera real.
 
 Ya le has hecho ${questionsAsked} pregunta(s) al usuario en esta conversación (máximo ${MAX_QUESTIONS}).${
     limitReached
@@ -43,7 +63,7 @@ Ya le has hecho ${questionsAsked} pregunta(s) al usuario en esta conversación (
       : ""
   }
 
-Cuando tengas monto, meses y aporte mensual, usa simulate_savings_goal para mostrar la proyección antes de confirmar nada. Solo llama create_savings_goal después de que el usuario confirme explícitamente vía confirmation_dialog. Cuando el flujo se cierra con una acción real, incluye "widget" en tu respuesta de emit_ui: "summary" con un resumen persistente (progress_tracker o kpi_card) y "detail" con un arreglo de componentes del catálogo que muestre la información completa de la meta (monto objetivo, plazo en meses, aporte mensual, acumulado y proyección).`;
+Cuando necesites un dato del usuario, devuelve una pantalla con un solo bloque de diálogo. Cuando tengas monto, meses y aporte mensual, usa simulate_savings_goal para mostrar la proyección en una pantalla (progress_tracker, trend_chart, scenario_comparison) antes de confirmar nada. Solo llama create_savings_goal después de que el usuario confirme explícitamente vía confirmation_dialog. Cuando el flujo se cierre con una acción real, arma una pantalla final completa de la meta: progress_tracker con acumulado vs monto objetivo, kpi_cards (aporte mensual, plazo en meses, faltante) y un summary_table o timeline con la proyección.`;
 }
 
 async function buildTools(): Promise<Anthropic.Tool[]> {
@@ -57,17 +77,20 @@ async function buildTools(): Promise<Anthropic.Tool[]> {
   const emitUiTool: Anthropic.Tool = {
     name: EMIT_UI_TOOL_NAME,
     description:
-      "Responde al usuario. Es la ÚNICA forma válida de terminar tu turno: nunca respondas con texto libre.",
-    input_schema: z.toJSONSchema(AgentUiResponseSchema) as Anthropic.Tool.InputSchema,
+      "Devuelve una pantalla al usuario. Es la ÚNICA forma válida de terminar tu turno: nunca respondas con texto libre.",
+    input_schema: z.toJSONSchema(AgentScreenSchema) as Anthropic.Tool.InputSchema,
   };
 
   return [...mcpAsAnthropicTools, emitUiTool];
 }
 
-function fallbackResponse(reply: string): AgentUiResponse {
+function fallbackResponse(reply: string): AgentScreen {
   return {
+    title: "No se pudo generar la pantalla",
     reply,
-    components: [{ type: "text_block", text: reply }],
+    scale: 1,
+    exportable: false,
+    blocks: [{ id: "fallback", component: { type: "text_block", text: reply }, w: 4, h: 1 }],
   };
 }
 
@@ -87,7 +110,7 @@ function toAnthropicMessage(turn: ChatTurn): Anthropic.MessageParam {
 }
 
 export interface AgentTurnResult {
-  response: AgentUiResponse;
+  response: AgentScreen;
   history: ChatTurn[];
 }
 
@@ -103,7 +126,7 @@ export async function runAgentTurn(params: {
     ? { role: "event", content: event }
     : { role: "user", content: message ?? "" };
 
-  const finish = (response: AgentUiResponse): AgentTurnResult => ({
+  const finish = (response: AgentScreen): AgentTurnResult => ({
     response,
     history: [...history, currentTurn, { role: "assistant", content: response }],
   });
@@ -165,7 +188,7 @@ export async function runAgentTurn(params: {
       }
 
       if (emitBlock) {
-        const parsed = AgentUiResponseSchema.safeParse(emitBlock.input);
+        const parsed = AgentScreenSchema.safeParse(emitBlock.input);
         if (parsed.success) {
           return finish(parsed.data);
         }

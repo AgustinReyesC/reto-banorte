@@ -171,19 +171,43 @@ export const UiComponentSchema = z.discriminatedUnion("type", [
 ]);
 export type UiComponent = z.infer<typeof UiComponentSchema>;
 
-/** Lo que el agente debe devolver siempre: nunca texto libre. */
-export const AgentUiResponseSchema = z.object({
-  reply: z.string(),
-  components: z.array(UiComponentSchema).min(1),
-  widget: z
-    .object({
-      widgetId: z.string(),
-      summary: UiComponentSchema,
-      detail: z.array(UiComponentSchema).optional(),
-    })
-    .optional(),
+// --- Pantalla generada por el agente ---
+
+/**
+ * Un bloque de la pantalla: un componente del catálogo con el tamaño (en
+ * celdas del grid) que el agente propone. La posición (x, y) no la decide el
+ * LLM: el frontend la auto-acomoda y luego el usuario la puede organizar.
+ */
+export const ScreenBlockSchema = z.object({
+  id: z.string(),
+  component: UiComponentSchema,
+  w: z.number().int().min(1).max(8).default(2),
+  h: z.number().int().min(1).max(6).default(1),
 });
-export type AgentUiResponse = z.infer<typeof AgentUiResponseSchema>;
+export type ScreenBlock = z.infer<typeof ScreenBlockSchema>;
+
+/**
+ * Lo que el agente devuelve siempre: una pantalla con su título, un texto
+ * breve de contexto y los bloques que la componen. Nunca texto libre.
+ */
+export const AgentScreenSchema = z.object({
+  title: z.string(),
+  reply: z.string(),
+  /**
+   * Factor de escala uniforme del widget (0.5–2). El agente lo ajusta cuando
+   * el usuario pide "más chico/grande": al multiplicar w y h de todos los
+   * bloques por el mismo factor, se conserva la relación de aspecto.
+   */
+  scale: z.number().min(0.5).max(2).default(1),
+  /**
+   * Indica si la pantalla puede guardarse como widget en Inicio. El agente lo
+   * pone en false cuando la solicitud está fuera de alcance (respuestas de
+   * aviso/error sin contenido de widget real).
+   */
+  exportable: z.boolean().default(true),
+  blocks: z.array(ScreenBlockSchema).min(1),
+});
+export type AgentScreen = z.infer<typeof AgentScreenSchema>;
 
 /** Lo que el frontend manda de vuelta cuando el usuario interactúa con un componente. */
 export const UiInteractionEventSchema = z.object({
@@ -196,7 +220,7 @@ export type UiInteractionEvent = z.infer<typeof UiInteractionEventSchema>;
 
 export const ChatTurnSchema = z.discriminatedUnion("role", [
   z.object({ role: z.literal("user"), content: z.string() }),
-  z.object({ role: z.literal("assistant"), content: AgentUiResponseSchema }),
+  z.object({ role: z.literal("assistant"), content: AgentScreenSchema }),
   z.object({ role: z.literal("event"), content: UiInteractionEventSchema }),
 ]);
 export type ChatTurn = z.infer<typeof ChatTurnSchema>;
@@ -214,7 +238,7 @@ export const ChatRequestSchema = z
 export type ChatRequest = z.infer<typeof ChatRequestSchema>;
 
 export const ChatResponseSchema = z.object({
-  response: AgentUiResponseSchema,
+  response: AgentScreenSchema,
   history: z.array(ChatTurnSchema),
 });
 export type ChatResponse = z.infer<typeof ChatResponseSchema>;

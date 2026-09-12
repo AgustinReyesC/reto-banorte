@@ -1,24 +1,44 @@
 import { z } from "zod";
 import { UiComponentSchema, type UiComponent } from "@/schemas/ui-catalog";
 
+/**
+ * Un widget guardado es una pantalla organizada: sus bloques ya tienen
+ * posición (x, y) y tamaño (w, h) dentro de una grilla de `cols` columnas.
+ */
+export interface PlacedBlock {
+  id: string;
+  component: UiComponent;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface WidgetPayload {
   widgetId: string;
-  summary: UiComponent;
-  detail?: UiComponent[];
+  title: string;
+  cols: number;
+  blocks: PlacedBlock[];
 }
 
-export interface SavedWidget extends WidgetPayload {
-  expanded: boolean;
-}
+export type SavedWidget = WidgetPayload;
 
 const STORAGE_KEY = "banorte-widgets";
-const LEGACY_STORAGE_KEY = "banorte-widget";
+
+const PlacedBlockSchema = z.object({
+  id: z.string(),
+  component: UiComponentSchema,
+  x: z.number().int().nonnegative(),
+  y: z.number().int().nonnegative(),
+  w: z.number().int().positive(),
+  h: z.number().int().positive(),
+});
 
 const SavedWidgetSchema = z.object({
   widgetId: z.string(),
-  summary: UiComponentSchema,
-  detail: z.array(UiComponentSchema).optional(),
-  expanded: z.boolean().catch(false),
+  title: z.string(),
+  cols: z.number().int().positive(),
+  blocks: z.array(PlacedBlockSchema).min(1),
 });
 
 const SavedWidgetListSchema = z.array(SavedWidgetSchema);
@@ -27,16 +47,17 @@ export function loadWidgets(): SavedWidget[] {
   if (typeof window === "undefined") return [];
 
   const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (raw) {
-    try {
-      const parsed = SavedWidgetListSchema.safeParse(JSON.parse(raw));
-      if (parsed.success) return parsed.data;
-    } catch {
-      window.localStorage.removeItem(STORAGE_KEY);
-    }
+  if (!raw) return [];
+
+  try {
+    const parsed = SavedWidgetListSchema.safeParse(JSON.parse(raw));
+    if (parsed.success) return parsed.data;
+    window.localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    window.localStorage.removeItem(STORAGE_KEY);
   }
 
-  return migrateLegacyWidget();
+  return [];
 }
 
 export function saveWidgets(widgets: SavedWidget[]): void {
@@ -44,35 +65,13 @@ export function saveWidgets(widgets: SavedWidget[]): void {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(widgets));
 }
 
-/** Upsert por widget_id: actualiza el existente sin duplicar; conserva su estado expandido. */
+/** Upsert por widget_id: actualiza el existente sin duplicar. */
 export function upsertWidget(widgets: SavedWidget[], incoming: WidgetPayload): SavedWidget[] {
   const index = widgets.findIndex((widget) => widget.widgetId === incoming.widgetId);
-  const expanded = index >= 0 ? (widgets[index]?.expanded ?? false) : false;
-  const next: SavedWidget = {
-    widgetId: incoming.widgetId,
-    summary: incoming.summary,
-    detail: incoming.detail,
-    expanded,
-  };
-
-  if (index === -1) return [...widgets, next];
-  return widgets.map((widget, i) => (i === index ? next : widget));
+  if (index === -1) return [...widgets, incoming];
+  return widgets.map((widget, i) => (i === index ? incoming : widget));
 }
 
-function migrateLegacyWidget(): SavedWidget[] {
-  if (typeof window === "undefined") return [];
-
-  const raw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
-  if (!raw) return [];
-
-  window.localStorage.removeItem(LEGACY_STORAGE_KEY);
-  try {
-    const parsed = SavedWidgetSchema.safeParse(JSON.parse(raw));
-    if (!parsed.success) return [];
-    const migrated = [parsed.data];
-    saveWidgets(migrated);
-    return migrated;
-  } catch {
-    return [];
-  }
+export function removeWidget(widgets: SavedWidget[], widgetId: string): SavedWidget[] {
+  return widgets.filter((widget) => widget.widgetId !== widgetId);
 }
