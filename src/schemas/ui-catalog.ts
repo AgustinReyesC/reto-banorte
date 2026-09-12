@@ -1,12 +1,10 @@
 import { z } from "zod";
 
 /**
- * BORRADOR — subconjunto mínimo del catálogo A2UI para cerrar el flujo feliz
- * de metas de ahorro. Faltan del catálogo completo: breakdown_chart,
- * trend_chart, summary_table, slider, timeline, alert_card (casos
- * secundarios). Dueño real de este archivo: quien construya ui-catalog/,
- * pero el agente necesita una forma concreta para poder devolver JSON
- * validado en vez de texto libre.
+ * Contrato del catálogo A2UI completo (display, diálogo y fallback).
+ * El agente solo puede invocar estos tipos con estas props: nunca HTML/JSX
+ * arbitrario. Si se necesita un componente nuevo, se acuerda con el equipo
+ * y se agrega aquí antes de tocar ui-catalog/.
  */
 
 // --- Diálogo (slot-filling) ---
@@ -67,6 +65,73 @@ export const ScenarioComparisonSchema = z.object({
     .min(2),
 });
 
+export const BreakdownChartSchema = z.object({
+  type: z.literal("breakdown_chart"),
+  title: z.string().optional(),
+  unit: z.string().optional(),
+  segments: z
+    .array(
+      z.object({
+        label: z.string(),
+        value: z.number(),
+        percentage: z.number().optional(),
+      })
+    )
+    .min(1),
+});
+
+export const TrendChartSchema = z.object({
+  type: z.literal("trend_chart"),
+  title: z.string().optional(),
+  unit: z.string().optional(),
+  points: z
+    .array(
+      z.object({
+        label: z.string(),
+        value: z.number(),
+      })
+    )
+    .min(2),
+});
+
+export const SummaryTableSchema = z.object({
+  type: z.literal("summary_table"),
+  title: z.string().optional(),
+  columns: z.array(z.string()).min(1),
+  rows: z.array(z.array(z.union([z.string(), z.number()]))).min(1),
+});
+
+export const SliderSchema = z.object({
+  type: z.literal("slider"),
+  id: z.string(),
+  label: z.string(),
+  min: z.number(),
+  max: z.number(),
+  step: z.number().positive().optional(),
+  defaultValue: z.number().optional(),
+  unit: z.string().optional(),
+});
+
+export const TimelineSchema = z.object({
+  type: z.literal("timeline"),
+  title: z.string().optional(),
+  items: z
+    .array(
+      z.object({
+        label: z.string(),
+        detail: z.string().optional(),
+      })
+    )
+    .min(1),
+});
+
+export const AlertCardSchema = z.object({
+  type: z.literal("alert_card"),
+  title: z.string(),
+  message: z.string(),
+  tone: z.enum(["info", "success", "warning", "danger"]).optional(),
+});
+
 export const CtaButtonSchema = z.object({
   type: z.literal("cta_button"),
   id: z.string(),
@@ -94,6 +159,12 @@ export const UiComponentSchema = z.discriminatedUnion("type", [
   KpiCardSchema,
   ProgressTrackerSchema,
   ScenarioComparisonSchema,
+  BreakdownChartSchema,
+  TrendChartSchema,
+  SummaryTableSchema,
+  SliderSchema,
+  TimelineSchema,
+  AlertCardSchema,
   CtaButtonSchema,
   TextBlockSchema,
   ListBlockSchema,
@@ -108,6 +179,7 @@ export const AgentUiResponseSchema = z.object({
     .object({
       widgetId: z.string(),
       summary: UiComponentSchema,
+      detail: z.array(UiComponentSchema).optional(),
     })
     .optional(),
 });
@@ -125,14 +197,20 @@ export type UiInteractionEvent = z.infer<typeof UiInteractionEventSchema>;
 export const ChatTurnSchema = z.discriminatedUnion("role", [
   z.object({ role: z.literal("user"), content: z.string() }),
   z.object({ role: z.literal("assistant"), content: AgentUiResponseSchema }),
+  z.object({ role: z.literal("event"), content: UiInteractionEventSchema }),
 ]);
 export type ChatTurn = z.infer<typeof ChatTurnSchema>;
 
-export const ChatRequestSchema = z.object({
-  usuarioId: z.string().default("u_ana"),
-  history: z.array(ChatTurnSchema).default([]),
-  message: z.string().min(1),
-});
+export const ChatRequestSchema = z
+  .object({
+    usuarioId: z.string().default("u_ana"),
+    history: z.array(ChatTurnSchema).default([]),
+    message: z.string().min(1).optional(),
+    event: UiInteractionEventSchema.optional(),
+  })
+  .refine((data) => Boolean(data.message) !== Boolean(data.event), {
+    message: "Envía exactamente uno: 'message' o 'event'.",
+  });
 export type ChatRequest = z.infer<typeof ChatRequestSchema>;
 
 export const ChatResponseSchema = z.object({

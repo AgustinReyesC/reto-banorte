@@ -11,11 +11,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Solicitud inválida", details: parsed.error.message }, { status: 400 });
   }
 
-  const { usuarioId, history, message } = parsed.data;
+  const { usuarioId, history, message, event } = parsed.data;
   const { response, history: updatedHistory } = await runAgentTurn({
     usuarioId,
     history,
-    userMessage: message,
+    message,
+    event,
   });
 
   const payload: ChatResponse = { response, history: updatedHistory };

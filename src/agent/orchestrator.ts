@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { listMcpTools, callMcpTool } from "./mcp-client";
-import { AgentUiResponseSchema, type AgentUiResponse, type ChatTurn } from "@/schemas/ui-catalog";
+import { AgentUiResponseSchema, type AgentUiResponse, type ChatTurn, type UiInteractionEvent } from "@/schemas/ui-catalog";
 
 /**
  * Loop de tool-use: Claude puede llamar cualquiera de las 6 tools del MCP
@@ -43,7 +43,7 @@ Ya le has hecho ${questionsAsked} pregunta(s) al usuario en esta conversación (
       : ""
   }
 
-Cuando tengas monto, meses y aporte mensual, usa simulate_savings_goal para mostrar la proyección antes de confirmar nada. Solo llama create_savings_goal después de que el usuario confirme explícitamente vía confirmation_dialog. Cuando el flujo se cierra con una acción real, incluye "widget" en tu respuesta de emit_ui con un resumen persistente (progress_tracker o kpi_card).`;
+Cuando tengas monto, meses y aporte mensual, usa simulate_savings_goal para mostrar la proyección antes de confirmar nada. Solo llama create_savings_goal después de que el usuario confirme explícitamente vía confirmation_dialog. Cuando el flujo se cierra con una acción real, incluye "widget" en tu respuesta de emit_ui: "summary" con un resumen persistente (progress_tracker o kpi_card) y "detail" con un arreglo de componentes del catálogo que muestre la información completa de la meta (monto objetivo, plazo en meses, aporte mensual, acumulado y proyección).`;
 }
 
 async function buildTools(): Promise<Anthropic.Tool[]> {
@@ -71,6 +71,21 @@ function fallbackResponse(reply: string): AgentUiResponse {
   };
 }
 
+/** Convierte una interacción de UI en contexto legible para el modelo. */
+function describeEvent(event: UiInteractionEvent): string {
+  return `[evento] El usuario interactuó con el componente "${event.componentId}" y devolvió: ${JSON.stringify(event.value)}`;
+}
+
+function toAnthropicMessage(turn: ChatTurn): Anthropic.MessageParam {
+  if (turn.role === "assistant") {
+    return { role: "assistant", content: JSON.stringify(turn.content) };
+  }
+  if (turn.role === "event") {
+    return { role: "user", content: describeEvent(turn.content) };
+  }
+  return { role: "user", content: turn.content };
+}
+
 export interface AgentTurnResult {
   response: AgentUiResponse;
   history: ChatTurn[];
@@ -79,27 +94,30 @@ export interface AgentTurnResult {
 export async function runAgentTurn(params: {
   usuarioId: string;
   history: ChatTurn[];
-  userMessage: string;
+  message?: string;
+  event?: UiInteractionEvent;
 }): Promise<AgentTurnResult> {
-  const { usuarioId, history, userMessage } = params;
+  const { usuarioId, history, message, event } = params;
 
   const questionsAsked = history.filter(
     (turn) => turn.role === "assistant" && isDialogOnlyTurn(turn.content)
   ).length;
 
+  const currentTurn: ChatTurn = event
+    ? { role: "event", content: event }
+    : { role: "user", content: message ?? "" };
+  const currentUserContent = event ? describeEvent(event) : message ?? "";
+
   const tools = await buildTools();
 
   const messages: Anthropic.MessageParam[] = [
-    ...history.map(
-      (turn): Anthropic.MessageParam =>
-        turn.role === "user" ? { role: "user", content: turn.content } : { role: "assistant", content: JSON.stringify(turn.content) }
-    ),
-    { role: "user", content: userMessage },
+    ...history.map(toAnthropicMessage),
+    { role: "user", content: currentUserContent },
   ];
 
   const finish = (response: AgentUiResponse): AgentTurnResult => ({
     response,
-    history: [...history, { role: "user", content: userMessage }, { role: "assistant", content: response }],
+    history: [...history, currentTurn, { role: "assistant", content: response }],
   });
 
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
