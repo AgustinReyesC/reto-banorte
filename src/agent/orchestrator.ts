@@ -10,7 +10,7 @@ import { AgentUiResponseSchema, type AgentUiResponse, type ChatTurn } from "@/sc
  * de confiar en ella.
  */
 
-const anthropic = new Anthropic();
+const anthropic = new Anthropic({ timeout: 30_000, maxRetries: 2 });
 const MODEL = "claude-sonnet-5";
 const MAX_TOOL_ITERATIONS = 6;
 const MAX_QUESTIONS = 4;
@@ -83,82 +83,86 @@ export async function runAgentTurn(params: {
 }): Promise<AgentTurnResult> {
   const { usuarioId, history, userMessage } = params;
 
-  const questionsAsked = history.filter(
-    (turn) => turn.role === "assistant" && isDialogOnlyTurn(turn.content)
-  ).length;
-
-  const tools = await buildTools();
-
-  const messages: Anthropic.MessageParam[] = [
-    ...history.map(
-      (turn): Anthropic.MessageParam =>
-        turn.role === "user" ? { role: "user", content: turn.content } : { role: "assistant", content: JSON.stringify(turn.content) }
-    ),
-    { role: "user", content: userMessage },
-  ];
-
   const finish = (response: AgentUiResponse): AgentTurnResult => ({
     response,
     history: [...history, { role: "user", content: userMessage }, { role: "assistant", content: response }],
   });
 
-  for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
-    const message = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 2048,
-      system: buildSystemPrompt(usuarioId, questionsAsked),
-      tools,
-      tool_choice: { type: "any" },
-      messages,
-    });
+  try {
+    const questionsAsked = history.filter(
+      (turn) => turn.role === "assistant" && isDialogOnlyTurn(turn.content)
+    ).length;
 
-    const toolUseBlocks = message.content.filter(
-      (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
-    );
+    const tools = await buildTools();
 
-    if (toolUseBlocks.length === 0) {
-      break;
-    }
+    const messages: Anthropic.MessageParam[] = [
+      ...history.map(
+        (turn): Anthropic.MessageParam =>
+          turn.role === "user" ? { role: "user", content: turn.content } : { role: "assistant", content: JSON.stringify(turn.content) }
+      ),
+      { role: "user", content: userMessage },
+    ];
 
-    const emitBlock = toolUseBlocks.find((block) => block.name === EMIT_UI_TOOL_NAME);
-    const mcpBlocks = toolUseBlocks.filter((block) => block.name !== EMIT_UI_TOOL_NAME);
+    for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+      const message = await anthropic.messages.create({
+        model: MODEL,
+        max_tokens: 2048,
+        system: buildSystemPrompt(usuarioId, questionsAsked),
+        tools,
+        tool_choice: { type: "any" },
+        messages,
+      });
 
-    const toolResults: Anthropic.ToolResultBlockParam[] = [];
+      const toolUseBlocks = message.content.filter(
+        (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
+      );
 
-    for (const block of mcpBlocks) {
-      try {
-        const result = await callMcpTool(block.name, block.input as Record<string, unknown>);
+      if (toolUseBlocks.length === 0) {
+        break;
+      }
+
+      const emitBlock = toolUseBlocks.find((block) => block.name === EMIT_UI_TOOL_NAME);
+      const mcpBlocks = toolUseBlocks.filter((block) => block.name !== EMIT_UI_TOOL_NAME);
+
+      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+
+      for (const block of mcpBlocks) {
+        try {
+          const result = await callMcpTool(block.name, block.input as Record<string, unknown>);
+          toolResults.push({
+            type: "tool_result",
+            tool_use_id: block.id,
+            content: result.text,
+            is_error: result.isError,
+          });
+        } catch {
+          toolResults.push({
+            type: "tool_result",
+            tool_use_id: block.id,
+            content: "No se pudo ejecutar la tool (error de conexión con el MCP).",
+            is_error: true,
+          });
+        }
+      }
+
+      if (emitBlock) {
+        const parsed = AgentUiResponseSchema.safeParse(emitBlock.input);
+        if (parsed.success) {
+          return finish(parsed.data);
+        }
         toolResults.push({
           type: "tool_result",
-          tool_use_id: block.id,
-          content: result.text,
-          is_error: result.isError,
-        });
-      } catch {
-        toolResults.push({
-          type: "tool_result",
-          tool_use_id: block.id,
-          content: "No se pudo ejecutar la tool (error de conexión con el MCP).",
+          tool_use_id: emitBlock.id,
+          content: `Tu respuesta no cumplió el schema del catálogo: ${parsed.error.message}. Corrígela y vuelve a llamar ${EMIT_UI_TOOL_NAME}.`,
           is_error: true,
         });
       }
-    }
 
-    if (emitBlock) {
-      const parsed = AgentUiResponseSchema.safeParse(emitBlock.input);
-      if (parsed.success) {
-        return finish(parsed.data);
-      }
-      toolResults.push({
-        type: "tool_result",
-        tool_use_id: emitBlock.id,
-        content: `Tu respuesta no cumplió el schema del catálogo: ${parsed.error.message}. Corrígela y vuelve a llamar ${EMIT_UI_TOOL_NAME}.`,
-        is_error: true,
-      });
+      messages.push({ role: "assistant", content: message.content });
+      messages.push({ role: "user", content: toolResults });
     }
-
-    messages.push({ role: "assistant", content: message.content });
-    messages.push({ role: "user", content: toolResults });
+  } catch (err) {
+    console.error("runAgentTurn falló:", err);
   }
 
   return finish(
