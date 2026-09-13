@@ -6,7 +6,7 @@ import { A2uiSurfaceView } from "@/a2ui/render";
 import { blocksToSurface } from "@/a2ui/surface";
 import { useWidgets } from "@/widgets/use-widgets";
 import { loadWidgets, type SavedWidget } from "@/widgets/store";
-import { screenToBlocks, trimBlocks, mergeBlocks } from "@/widgets/screen-utils";
+import { screenToBlocks, trimBlocks, mergeBlocks, layoutWidget } from "@/widgets/screen-utils";
 import type { AgentScreen, ChatTurn } from "@/schemas/ui-catalog";
 import { CardDetailsTile, BalanceTile, QuickActionsTile, type DashboardData } from "@/app/dashboard-widgets";
 import { resolveLayout, compactLayout, rectsOverlap, type GridRect } from "@/app/grid-layout";
@@ -45,23 +45,30 @@ function Spinner({ label }: { label?: string }) {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        gap: 10,
+        gap: 12,
         height: "100%",
         color: "var(--ink-soft)",
         fontSize: 13,
       }}
     >
-      <span
-        aria-hidden
-        style={{
-          width: 26,
-          height: 26,
-          borderRadius: "50%",
-          border: "3px solid var(--line)",
-          borderTopColor: "var(--garnet)",
-          animation: "agent-spin 0.8s linear infinite",
-        }}
-      />
+      <svg width="42" height="42" viewBox="0 0 50 50" role="img" aria-label="Generando widget">
+        <circle cx="25" cy="25" r="20" fill="none" stroke="var(--line)" strokeWidth="4" />
+        <circle
+          cx="25"
+          cy="25"
+          r="20"
+          fill="none"
+          stroke="var(--garnet)"
+          strokeWidth="4"
+          strokeLinecap="round"
+          strokeDasharray="90 160"
+          style={{
+            transformBox: "fill-box",
+            transformOrigin: "center",
+            animation: "agent-spin 0.9s linear infinite",
+          }}
+        />
+      </svg>
       {label ? <span>{label}</span> : null}
     </div>
   );
@@ -262,6 +269,26 @@ export function Dashboard({ dashboardData, onStartGoal }: { dashboardData: Dashb
     }
   }
 
+  /** Regenera el widget con un mejor acomodo, conservando finalidad y datos. */
+  async function regenerateWidget(widget: SavedWidget) {
+    setBusyId(widget.widgetId);
+    setAdaptingId(widget.widgetId);
+    try {
+      await runWidgetTurn(
+        widget,
+        {
+          message: `Regenera este widget con un acomodo más estético (siguiendo los patrones de diseño) para un tamaño de ${widget.cols} columnas de ancho por ${widgetRows(widget.blocks)} filas de alto. Conserva exactamente la misma finalidad y datos; puedes reorganizar, agregar o quitar componentes si mejora el resultado.`,
+        },
+        { requireExportable: true, replaceLayout: true }
+      );
+    } catch (error) {
+      console.error("Regeneración del widget falló:", error);
+    } finally {
+      setBusyId(null);
+      setAdaptingId(null);
+    }
+  }
+
   /**
    * Cuando el usuario cambia el tamaño del widget, no lo escalamos: le pedimos
    * al agente (A2UI) que regenere la misma información adaptada a ese tamaño.
@@ -330,10 +357,11 @@ export function Dashboard({ dashboardData, onStartGoal }: { dashboardData: Dashb
       { id: "summary", w: 4, h: 2 },
       ...widgets.map((w) => {
         const saved = savedSizes[w.widgetId];
+        const layout = layoutWidget(w.blocks, saved?.w ?? w.cols);
         return {
           id: w.widgetId,
-          w: saved?.w ?? w.cols,
-          h: saved?.h ?? widgetRows(w.blocks),
+          w: layout.cols,
+          h: saved?.h ?? layout.rows + 1,
         };
       }),
     ],
@@ -619,6 +647,8 @@ export function Dashboard({ dashboardData, onStartGoal }: { dashboardData: Dashb
 
           const widget = widgetsById.get(item.id);
           if (!widget) return null;
+          const savedWidget = savedSizes[widget.widgetId];
+          const widgetLayout = layoutWidget(widget.blocks, savedWidget?.w ?? widget.cols);
           return (
             <Tile
               key={item.id}
@@ -647,6 +677,22 @@ export function Dashboard({ dashboardData, onStartGoal }: { dashboardData: Dashb
                   ) : null}
                   <button
                     type="button"
+                    onClick={() => void regenerateWidget(widget)}
+                    disabled={busyId === widget.widgetId}
+                    title="Regenerar el acomodo del widget"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: busyId === widget.widgetId ? "var(--ink-faint)" : "var(--ink-soft)",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: busyId === widget.widgetId ? "default" : "pointer",
+                    }}
+                  >
+                    Regenerar
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => remove(widget.widgetId)}
                     style={{ background: "none", border: "none", color: "var(--ink-faint)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
                   >
@@ -660,7 +706,7 @@ export function Dashboard({ dashboardData, onStartGoal }: { dashboardData: Dashb
                   <Spinner label="Ajustando al nuevo tamaño…" />
                 ) : (
                   <A2uiSurfaceView
-                    surface={blocksToSurface(widget.widgetId, widget.cols, widget.blocks)}
+                    surface={blocksToSurface(widget.widgetId, widgetLayout.cols, widgetLayout.blocks)}
                     rowHeight="fill"
                     onAction={(componentId, value) => void handleWidgetAction(widget, componentId, value)}
                   />

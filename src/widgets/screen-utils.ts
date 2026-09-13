@@ -49,8 +49,85 @@ export function screenToBlocks(screen: AgentScreen): PlacedBlock[] {
       y: 0,
     };
   });
-  const layout = resolveLayout(seeded, {}, SCREEN_COLS);
-  return seeded.map((block) => ({ ...block, ...layout[block.id] }));
+  // Sin rellenar: el widget se ajusta al ancho que realmente usa su contenido.
+  return packBlocks(seeded, SCREEN_COLS, false);
+}
+
+/**
+ * Ajusta el layout del widget a un número de columnas (las que ocupa el tile):
+ * reempaqueta los bloques en esa cantidad de columnas para que las celdas
+ * conserven su ancho (~1 columna del dashboard) y no se compriman.
+ */
+export function layoutWidget(
+  blocks: PlacedBlock[],
+  targetCols: number
+): { cols: number; blocks: PlacedBlock[]; rows: number } {
+  const cols = Math.min(Math.max(Math.round(targetCols), 1), SCREEN_COLS);
+  const packed = packBlocks(
+    blocks.map((block) => ({ ...block, w: Math.min(block.w, cols) })),
+    cols
+  );
+  const rows = packed.reduce((max, block) => Math.max(max, block.y + block.h), 0);
+  return { cols, blocks: packed, rows };
+}
+
+/**
+ * Empaqueta los bloques en filas que llenan el ancho disponible y con alturas
+ * uniformes. Es la red de seguridad para que el widget siempre tenga un
+ * acomodo ordenado aunque el agente no siga los patrones al pie de la letra.
+ * Asume que los bloques vienen en orden de fila (izq→der, arriba→abajo).
+ */
+export function packBlocks(blocks: PlacedBlock[], cols: number, fill = true): PlacedBlock[] {
+  const rows: PlacedBlock[][] = [];
+  let current: PlacedBlock[] = [];
+  let currentWidth = 0;
+
+  for (const block of blocks) {
+    const w = Math.min(Math.max(block.w, 1), cols);
+    if (current.length > 0 && currentWidth + w > cols) {
+      rows.push(current);
+      current = [];
+      currentWidth = 0;
+    }
+    current.push({ ...block, w });
+    currentWidth += w;
+    if (currentWidth >= cols) {
+      rows.push(current);
+      current = [];
+      currentWidth = 0;
+    }
+  }
+  if (current.length > 0) rows.push(current);
+
+  const result: PlacedBlock[] = [];
+  let y = 0;
+
+  for (const row of rows) {
+    // Reparte el espacio sobrante para que la fila llene el ancho.
+    const widths = row.map((block) => block.w);
+    let leftover = fill ? cols - widths.reduce((sum, w) => sum + w, 0) : 0;
+    let index = 0;
+    while (leftover > 0 && widths.length > 0) {
+      const position = index % widths.length;
+      if ((widths[position] ?? cols) < cols) {
+        widths[position] = (widths[position] ?? 0) + 1;
+        leftover -= 1;
+      }
+      index += 1;
+      if (index > cols * widths.length) break;
+    }
+
+    const rowHeight = row.reduce((max, block) => Math.max(max, block.h), 1);
+    let x = 0;
+    row.forEach((block, i) => {
+      const w = widths[i] ?? block.w;
+      result.push({ ...block, x, y, w, h: rowHeight });
+      x += w;
+    });
+    y += rowHeight;
+  }
+
+  return result;
 }
 
 /**
