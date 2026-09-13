@@ -39,6 +39,7 @@ export async function getSavingsGoal(usuarioId: string): Promise<SavingsGoal | n
   return db.savingsGoals[usuarioId] ?? null;
 }
 
+
 export async function upsertSavingsGoal(
   usuarioId: string,
   data: { monto: number; meses: number; aporteMensual: number }
@@ -62,3 +63,5 @@ export async function upsertSavingsGoal(
   await writeDb(db);
   return goal;
 }
+
+

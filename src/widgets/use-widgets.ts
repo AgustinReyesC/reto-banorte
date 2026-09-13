@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { loadWidgets, saveWidgets, upsertWidget, type SavedWidget, type WidgetPayload } from "@/widgets/store";
-
 export function useWidgets() {
   const [widgets, setWidgets] = useState<SavedWidget[]>([]);
 
@@ -28,5 +27,5 @@ export function useWidgets() {
     });
   }, []);
 
-  return { widgets, upsert, toggle };
+  return { widgets, upsert, toggle };//remove n
 }
