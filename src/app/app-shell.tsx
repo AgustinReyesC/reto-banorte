@@ -103,7 +103,11 @@ export function AppShell({ usuarioId, usuarioNombre, dashboardData }: { usuarioI
 
       <main style={{ flex: 1, minWidth: 0, padding: "28px clamp(20px, 4vw, 48px)", background: "var(--paper)" }}>
         {tab === "inicio" ? (
-          <Dashboard dashboardData={dashboardData} onStartGoal={() => goToAgentWithPrompt("Quiero crear una meta de ahorro")} />
+          <Dashboard
+            usuarioId={usuarioId}
+            dashboardData={dashboardData}
+            onStartGoal={() => goToAgentWithPrompt("Quiero crear una meta de ahorro")}
+          />
         ) : (
           <AgentScreenView
             usuarioId={usuarioId}

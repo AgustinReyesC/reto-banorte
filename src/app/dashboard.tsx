@@ -10,6 +10,7 @@ import { screenToBlocks, trimBlocks, mergeBlocks, layoutWidget } from "@/widgets
 import type { AgentScreen, ChatTurn } from "@/schemas/ui-catalog";
 import { CardDetailsTile, BalanceTile, QuickActionsTile, type DashboardData } from "@/app/dashboard-widgets";
 import { resolveLayout, compactLayout, rectsOverlap, type GridRect } from "@/app/grid-layout";
+import { WidgetPicker } from "@/app/widget-picker";
 
 const POSITIONS_STORAGE_KEY = "banorte-dashboard-positions";
 const SIZES_STORAGE_KEY = "banorte-dashboard-sizes";
@@ -173,9 +174,18 @@ function Tile({
   );
 }
 
-export function Dashboard({ dashboardData, onStartGoal }: { dashboardData: DashboardData; onStartGoal: () => void }) {
+export function Dashboard({
+  usuarioId,
+  dashboardData,
+  onStartGoal,
+}: {
+  usuarioId: string;
+  dashboardData: DashboardData;
+  onStartGoal: () => void;
+}) {
   const { widgets, upsert, remove } = useWidgets();
   const [editMode, setEditMode] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [previewBox, setPreviewBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [savedPositions, setSavedPositions] = useState<Record<string, { x: number; y: number }>>({});
@@ -351,7 +361,7 @@ export function Dashboard({ dashboardData, onStartGoal }: { dashboardData: Dashb
 
   const items: GridItem[] = useMemo(
     () => [
-      { id: "card", w: 4, h: 2 },
+      { id: "card", w: 3, h: 3 },
       { id: "balance", w: 2, h: 2 },
       { id: "quick-actions", w: 2, h: 2 },
       { id: "summary", w: 4, h: 2 },
@@ -540,28 +550,57 @@ export function Dashboard({ dashboardData, onStartGoal }: { dashboardData: Dashb
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 20 }}>
         <h1 style={{ fontFamily: "var(--font-display)", fontSize: 26, margin: 0 }}>Inicio</h1>
-        <button
-          type="button"
-          onClick={() => setEditMode((v) => !v)}
-          style={{
-            background: editMode ? "var(--garnet)" : "var(--surface)",
-            color: editMode ? "#fff" : "var(--ink)",
-            border: `1px solid ${editMode ? "var(--garnet)" : "var(--line)"}`,
-            borderRadius: 10,
-            padding: "9px 16px",
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          {editMode ? "Listo" : "Modificar"}
-        </button>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            style={{
+              background: "var(--surface)",
+              color: "var(--ink)",
+              border: "1px solid var(--line)",
+              borderRadius: 10,
+              padding: "9px 16px",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Widgets
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditMode((v) => !v)}
+            style={{
+              background: editMode ? "var(--garnet)" : "var(--surface)",
+              color: editMode ? "#fff" : "var(--ink)",
+              border: `1px solid ${editMode ? "var(--garnet)" : "var(--line)"}`,
+              borderRadius: 10,
+              padding: "9px 16px",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            {editMode ? "Listo" : "Modificar"}
+          </button>
+        </div>
       </div>
 
       {editMode ? (
         <p style={{ color: "var(--ink-soft)", fontSize: 13, marginTop: -10, marginBottom: 18 }}>
           Arrastra un widget para moverlo y usa la esquina inferior derecha para cambiar su tamaño.
         </p>
+      ) : null}
+
+      {pickerOpen ? (
+        <WidgetPicker
+          usuarioId={usuarioId}
+          onAdd={(payload) => {
+            upsert(payload);
+            setPickerOpen(false);
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
       ) : null}
 
       <div style={{ overflowX: "auto", paddingBottom: 4 }}>
