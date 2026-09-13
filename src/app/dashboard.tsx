@@ -426,10 +426,10 @@ export function Dashboard({
       const draft = resizeDraftRef.current;
       if (draft) {
         const candidate: GridRect = { x: active.rect.x, y: active.rect.y, w: draft.w, h: draft.h };
-        const others = Object.entries(layoutRef.current)
-          .filter(([id]) => id !== active.id)
-          .map(([, rect]) => rect);
-        if (!others.some((rect) => rectsOverlap(candidate, rect))) {
+        const otherEntries = Object.entries(layoutRef.current).filter(([id]) => id !== active.id);
+        const collides = otherEntries.some(([, rect]) => rectsOverlap(candidate, rect));
+
+        const commitResize = () => {
           setSavedSizes((current) => {
             const next = { ...current, [active.id]: { w: draft.w, h: draft.h } };
             window.localStorage.setItem(SIZES_STORAGE_KEY, JSON.stringify(next));
@@ -438,6 +438,30 @@ export function Dashboard({
           // Le pedimos al agente que regenere el widget adaptado a ese tamaño.
           const widget = loadWidgets().find((item) => item.widgetId === active.id);
           if (widget) void adaptWidgetSizeRef.current(widget, draft.w, draft.h);
+        };
+
+        if (!collides) {
+          commitResize();
+        } else {
+          // Al agrandar, en vez de rechazar el resize, desplazamos a quien
+          // estorbe: el widget conserva su posición y toma el nuevo tamaño,
+          // y el resto se reacomoda alrededor (mismo criterio que al
+          // arrastrar un widget sobre otro).
+          setSavedPositions((currentPositions) => {
+            const prioritized = [
+              { id: active.id, w: draft.w, h: draft.h },
+              ...otherEntries.map(([id, rect]) => ({ id, w: rect.w, h: rect.h })),
+            ];
+            const forced = { ...currentPositions, [active.id]: { x: active.rect.x, y: active.rect.y } };
+            const resolved = resolveLayout(prioritized, forced, COLS);
+            const next: Record<string, { x: number; y: number }> = { ...currentPositions };
+            for (const [id, rect] of Object.entries(resolved)) {
+              next[id] = { x: rect.x, y: rect.y };
+            }
+            window.localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(next));
+            return next;
+          });
+          commitResize();
         }
       }
       resizeDraftRef.current = null;
