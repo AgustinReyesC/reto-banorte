@@ -205,6 +205,12 @@ export const AgentScreenSchema = z.object({
    * aviso/error sin contenido de widget real).
    */
   exportable: z.boolean().default(true),
+  /**
+   * Indica si el widget depende de datos que cambian (análisis, KPIs, saldos)
+   * y por lo tanto debe refrescarse periódicamente en Inicio. El agente lo
+   * pone en false para pantallas estáticas (confirmaciones, avisos).
+   */
+  refreshable: z.boolean().default(true),
   blocks: z.array(ScreenBlockSchema).min(1),
 });
 export type AgentScreen = z.infer<typeof AgentScreenSchema>;

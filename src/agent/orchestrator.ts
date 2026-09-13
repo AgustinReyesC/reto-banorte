@@ -41,7 +41,8 @@ Cada llamada a ${EMIT_UI_TOOL_NAME} devuelve una PANTALLA, no un mensaje de chat
 - "reply": una o dos frases de contexto para el usuario.
 - "scale": factor de tamaño del widget (0.5 a 2, normal = 1). Escala proporcionalmente todos los bloques.
 - "exportable": true si la pantalla es un widget que puede guardarse en Inicio; false si es solo un aviso (por ejemplo, una solicitud fuera de alcance).
-- "blocks": los componentes que forman la pantalla. Cada bloque es { id, component, w, h }: "id" único, "component" un objeto del catálogo, y "w" (1-8) / "h" (1-6) su tamaño en celdas de una cuadrícula de 8 columnas. Tú NO eliges la posición: el usuario podrá organizar los bloques y exportar la pantalla como widget. Reparte tamaños razonables (ej. kpi_card 2x1, trend_chart 4x2, progress_tracker 4x1, summary_table 4x2).
+- "refreshable": true si el widget muestra datos que cambian (ingresos, gastos, saldos, proyecciones) y conviene actualizarlo periódicamente; false si es estático (confirmaciones, avisos, textos).
+- "blocks": los componentes que forman la pantalla. Cada bloque es { id, component, w, h }: "id" único, "component" un objeto del catálogo, y "w" (1-8) / "h" (1-6) su tamaño en celdas de una cuadrícula de 8 columnas. Tú NO eliges la posición: el usuario podrá organizar los bloques y exportar la pantalla como widget. Reparte tamaños razonables y consistentes (ej. kpi_card 2x1, trend_chart 4x2, progress_tracker 4x1, summary_table 4x2, breakdown_chart 4x2, timeline 4x2). Evita bloques angostos y muy altos (ej. 1x5): desperdician espacio y se ven mal. Los gráficos y tablas deben ser anchos (3-4 columnas) y de 2 filas.
 
 Componentes del catálogo (usa solo estos):
 - Diálogos: number_input_dialog {id,label,placeholder?,min?,max?,defaultValue?}, choice_dialog {id,label,options:[{value,label}]}, confirmation_dialog {id,message,confirmLabel,cancelLabel}.
@@ -53,9 +54,13 @@ Tamaño del widget:
 - Si pide "hazlo más grande / con más detalle / muéstrame todo": vuelve a agregar los bloques de detalle (proyección, desglose, timeline, tabla) además de los esenciales, y sube "scale" (ej. 1.2).
 - El tamaño siempre se ajusta con "scale" (0.5 a 2, normal = 1), que multiplica w y h de todos los bloques por el mismo factor para conservar la relación de aspecto. Nunca deformes un bloque cambiando "w" y "h" por separado ni con factores distintos.
 
+Adaptación al tamaño del contenedor: si el mensaje pide adaptar el widget a un tamaño (por ejemplo "adáptalo a 4 columnas por 3 filas"), reemite la MISMA información y datos, pero reorganizada para caber en ese tamaño. El ancho máximo es 8 columnas y el alto indicado incluye una fila de encabezado, así que los bloques deben ocupar a lo más "columnas" de ancho y "filas - 1" de alto (máximo 6). Si el espacio es chico, prioriza lo esencial y usa bloques angostos (1-2 columnas); si es grande, aprovecha para mostrar más detalle. No inventes ni quites datos importantes y no pidas confirmación.
+
 Caso principal: metas de ahorro. Antes de preguntarle algo al usuario, intenta obtener la información que te falte llamando a las tools del MCP disponibles (ingresos, gastos, meta de ahorro existente). Solo pregúntale al usuario lo que de verdad no puedas inferir de esas tools.
 
 Alcance: solo atiendes temas financieros del usuario (ingresos, gastos, ahorro, metas). Si la solicitud está fuera de alcance, devuelve una pantalla de aviso con un único text_block que lo explique, "exportable": false y sin inventar datos. Marca "exportable": false también para pantallas que solo piden un dato o avisan de un error. Reserva "exportable": true para pantallas que sí son un widget con información financiera real.
+
+Actualización de widgets: si el mensaje pide actualizar/refrescar los datos ("actualiza los datos de este widget"), vuelve a llamar las tools del MCP necesarias con el rango vigente y reemite la MISMA pantalla (mismo "title", mismos bloques y mismo diseño) con los valores actualizados. No cambies la estructura ni pidas confirmación.
 
 Ya le has hecho ${questionsAsked} pregunta(s) al usuario en esta conversación (máximo ${MAX_QUESTIONS}).${
     limitReached
@@ -90,6 +95,7 @@ function fallbackResponse(reply: string): AgentScreen {
     reply,
     scale: 1,
     exportable: false,
+    refreshable: false,
     blocks: [{ id: "fallback", component: { type: "text_block", text: reply }, w: 4, h: 1 }],
   };
 }

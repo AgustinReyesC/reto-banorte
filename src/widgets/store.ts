@@ -1,9 +1,16 @@
 import { z } from "zod";
-import { UiComponentSchema, type UiComponent } from "@/schemas/ui-catalog";
+import {
+  UiComponentSchema,
+  ChatTurnSchema,
+  type UiComponent,
+  type ChatTurn,
+} from "@/schemas/ui-catalog";
 
 /**
  * Un widget guardado es una pantalla organizada: sus bloques ya tienen
  * posición (x, y) y tamaño (w, h) dentro de una grilla de `cols` columnas.
+ * Además conserva el contexto (usuario e historial) para poder ser
+ * interactivo y actualizarse solo desde Inicio.
  */
 export interface PlacedBlock {
   id: string;
@@ -19,6 +26,9 @@ export interface WidgetPayload {
   title: string;
   cols: number;
   blocks: PlacedBlock[];
+  usuarioId: string;
+  history: ChatTurn[];
+  refreshable: boolean;
 }
 
 export type SavedWidget = WidgetPayload;
@@ -39,6 +49,9 @@ const SavedWidgetSchema = z.object({
   title: z.string(),
   cols: z.number().int().positive(),
   blocks: z.array(PlacedBlockSchema).min(1),
+  usuarioId: z.string().default("u_ana"),
+  history: z.array(ChatTurnSchema).default([]),
+  refreshable: z.boolean().default(true),
 });
 
 const SavedWidgetListSchema = z.array(SavedWidgetSchema);

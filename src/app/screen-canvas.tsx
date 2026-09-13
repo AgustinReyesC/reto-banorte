@@ -163,6 +163,7 @@ export function ScreenCanvas({
               position: "relative",
               minWidth: 0,
               minHeight: 0,
+              containerType: "inline-size",
               opacity: isDragging ? 0.65 : 1,
             }}
           >

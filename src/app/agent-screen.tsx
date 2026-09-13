@@ -3,13 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentScreen, ChatTurn, UiInteractionEvent } from "@/schemas/ui-catalog";
 import { ScreenCanvas } from "@/app/screen-canvas";
-import { resolveLayout } from "@/app/grid-layout";
 import { useWidgets } from "@/widgets/use-widgets";
 import type { PlacedBlock } from "@/widgets/store";
+import { screenToBlocks, trimBlocks, SCREEN_COLS } from "@/widgets/screen-utils";
 
-const COLS = 8;
+const COLS = SCREEN_COLS;
 const COL_WIDTH = 112;
-const MAX_H = 6;
 
 const SUGGESTIONS = [
   "Quiero ahorrar 50,000 pesos en 8 meses",
@@ -20,25 +19,6 @@ const SUGGESTIONS = [
 function newId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return `screen-${Date.now()}`;
-}
-
-/**
- * Convierte los bloques que propone el agente en bloques colocados en la
- * grilla. El "scale" de la pantalla multiplica w y h de todos los bloques por
- * el mismo factor, de modo que el tamaño cambia sin deformar la proporción.
- */
-function placeBlocks(screen: AgentScreen): PlacedBlock[] {
-  const scale = screen.scale;
-  const seeded: PlacedBlock[] = screen.blocks.map((block) => ({
-    id: block.id,
-    component: block.component,
-    w: Math.min(Math.max(Math.round(block.w * scale), 1), COLS),
-    h: Math.min(Math.max(Math.round(block.h * scale), 1), MAX_H),
-    x: 0,
-    y: 0,
-  }));
-  const layout = resolveLayout(seeded, {}, COLS);
-  return seeded.map((block) => ({ ...block, ...layout[block.id] }));
 }
 
 function Spinner({ size = 14, light = false }: { size?: number; light?: boolean }) {
@@ -92,7 +72,7 @@ export function AgentScreenView({
 
   function applyScreen(next: AgentScreen) {
     setScreen(next);
-    setBlocks(placeBlocks(next));
+    setBlocks(screenToBlocks(next));
     setScreenId(newId());
     setEditMode(false);
     setExported(false);
@@ -130,6 +110,7 @@ export function AgentScreenView({
         reply: "No pude generar la respuesta. Intenta otra vez con otra solicitud.",
         scale: 1,
         exportable: false,
+        refreshable: false,
         blocks: [
           {
             id: "error",
@@ -157,14 +138,18 @@ export function AgentScreenView({
 
   function exportWidget() {
     if (!screen || !screen.exportable) return;
-    // El widget ocupa solo el área que realmente usa su contenido: recortamos
-    // los márgenes vacíos y guardamos el ancho en columnas usadas, en vez de
-    // forzarlo siempre a las 8 columnas del lienzo de diseño.
-    const minX = blocks.reduce((min, block) => Math.min(min, block.x), Number.POSITIVE_INFINITY);
-    const minY = blocks.reduce((min, block) => Math.min(min, block.y), Number.POSITIVE_INFINITY);
-    const normalized = blocks.map((block) => ({ ...block, x: block.x - minX, y: block.y - minY }));
-    const cols = normalized.reduce((max, block) => Math.max(max, block.x + block.w), 1);
-    upsert({ widgetId: screenId, title: screen.title, cols, blocks: normalized });
+    // El widget ocupa solo el área que realmente usa su contenido y guarda el
+    // contexto (usuario + historial) para poder ser interactivo y refrescarse.
+    const { cols, blocks: normalized } = trimBlocks(blocks);
+    upsert({
+      widgetId: screenId,
+      title: screen.title,
+      cols,
+      blocks: normalized,
+      usuarioId,
+      history,
+      refreshable: screen.refreshable,
+    });
     setExported(true);
     onExported?.();
   }
