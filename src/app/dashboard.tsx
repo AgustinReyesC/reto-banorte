@@ -526,6 +526,23 @@ export function Dashboard({
             window.localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(next));
             return next;
           });
+        } else {
+          // Cae sobre uno o más widgets que no se pueden intercambiar 1 a 1
+          // (tamaños distintos, o más de uno de por medio): en vez de
+          // rechazar el drop, el widget arrastrado se queda exactamente
+          // donde lo soltaste y el resto se reacomoda a su alrededor,
+          // conservando su posición guardada cuando todavía cabe.
+          setSavedPositions((current) => {
+            const prioritized = [dragged, ...items.filter((item) => item.id !== draggedId)];
+            const forced = { ...current, [draggedId]: { x, y } };
+            const resolved = resolveLayout(prioritized, forced, COLS);
+            const next: Record<string, { x: number; y: number }> = { ...current };
+            for (const [id, rect] of Object.entries(resolved)) {
+              next[id] = { x: rect.x, y: rect.y };
+            }
+            window.localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(next));
+            return next;
+          });
         }
       }
     }
