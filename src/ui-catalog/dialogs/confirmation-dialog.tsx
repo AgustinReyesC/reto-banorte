@@ -10,7 +10,7 @@ export function ConfirmationDialog({
   onAction?: RenderUiComponentOptions["onAction"];
 }) {
   return (
-    <div style={{ border: "1px solid var(--line)", borderRadius: 16, padding: 16, display: "grid", gap: 12 }}>
+    <div style={{ border: "1px solid var(--line)", borderRadius: "var(--radius-inner)", padding: "var(--space-4)", display: "grid", gap: "var(--space-3)" }}>
       <div style={{ color: "var(--ink)" }}>{component.message}</div>
       <div style={{ display: "flex", gap: 8 }}>
         <button

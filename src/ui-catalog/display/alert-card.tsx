@@ -16,10 +16,12 @@ export function AlertCard({ component }: { component: ComponentOfType<"alert_car
         background: tone.background,
         border: `1px solid ${tone.border}`,
         borderLeft: `4px solid ${tone.accent}`,
-        borderRadius: 14,
-        padding: 14,
+        borderRadius: "var(--radius-inner)",
+        padding: "var(--space-4)",
         display: "grid",
-        gap: 6,
+        gap: "var(--space-2)",
+        height: "100%",
+        alignContent: "start",
       }}
     >
       <strong style={{ color: tone.accent }}>{component.title}</strong>

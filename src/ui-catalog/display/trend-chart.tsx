@@ -20,7 +20,7 @@ export function TrendChart({ component }: { component: ComponentOfType<"trend_ch
   }));
 
   return (
-    <div style={{ border: "1px solid var(--line)", borderRadius: 16, padding: 16, display: "grid", gap: 8 }}>
+    <div style={{ border: "1px solid var(--line)", borderRadius: "var(--radius-inner)", padding: "var(--space-4)", display: "grid", gap: "var(--space-2)", height: "100%", alignContent: "start" }}>
       {component.title ? <strong style={{ color: "var(--ink)" }}>{component.title}</strong> : null}
       <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} width="100%" height={HEIGHT} role="img" aria-label={component.title ?? "Tendencia"}>
         <line x1={PAD} y1={HEIGHT - PAD} x2={WIDTH - PAD} y2={HEIGHT - PAD} stroke="var(--line)" strokeWidth={1} />

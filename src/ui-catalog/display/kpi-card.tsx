@@ -5,7 +5,7 @@ export function KpiCard({ component }: { component: ComponentOfType<"kpi_card"> 
     <div
       style={{
         background: "linear-gradient(135deg, var(--garnet-soft) 0%, var(--surface-sunken) 100%)",
-        borderRadius: 16,
+        borderRadius: "var(--radius-inner)",
         padding: "clamp(10px, 8cqw, 16px)",
         display: "grid",
         gap: "clamp(4px, 4cqw, 8px)",

@@ -9,17 +9,17 @@ import { loadWidgets, type SavedWidget } from "@/widgets/store";
 import { screenToBlocks, trimBlocks, mergeBlocks } from "@/widgets/screen-utils";
 import type { AgentScreen, ChatTurn } from "@/schemas/ui-catalog";
 import { CardDetailsTile, BalanceTile, QuickActionsTile, type DashboardData } from "@/app/dashboard-widgets";
-import { resolveLayout, rectsOverlap, type GridRect } from "@/app/grid-layout";
+import { resolveLayout, compactLayout, rectsOverlap, type GridRect } from "@/app/grid-layout";
 
 const POSITIONS_STORAGE_KEY = "banorte-dashboard-positions";
 const SIZES_STORAGE_KEY = "banorte-dashboard-sizes";
 const COLS = 8;
 const COL_WIDTH = 112;
-const ROW_HEIGHT = 108;
+const ROW_HEIGHT = 112;
+const GAP = 20;
 const REFRESH_INTERVAL_MS = 60_000;
 const REFRESH_MESSAGE =
   "Actualiza los datos de este widget manteniendo el mismo diseño y los mismos bloques.";
-const GAP = 16;
 
 interface GridItem {
   id: string;
@@ -120,9 +120,9 @@ function Tile({
         gridRow: `${rect.y + 1} / span ${rect.h}`,
         background: "var(--surface)",
         border: "1px solid var(--line)",
-        borderRadius: 16,
-        padding: compact ? 12 : 18,
-        boxShadow: "0 1px 2px rgba(38, 22, 26, 0.04)",
+        borderRadius: "var(--radius-card)",
+        padding: compact ? 16 : 20,
+        boxShadow: "var(--shadow-card)",
         outline: editMode ? "1.5px dashed var(--line)" : "none",
         outlineOffset: -6,
         opacity: isDragged ? 0.35 : 1,
@@ -133,10 +133,10 @@ function Tile({
       }}
     >
       {editMode || title ? (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: compact ? 8 : 12, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: compact ? 12 : 16, flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {editMode ? <DragHandle /> : null}
-            {title ? <span style={{ fontSize: 13, fontWeight: 700, color: "var(--ink)" }}>{title}</span> : null}
+            {title ? <span style={{ fontSize: 14, fontWeight: 600, color: "var(--ink)", letterSpacing: "-0.01em" }}>{title}</span> : null}
           </div>
           {!editMode ? headerAction : null}
         </div>
@@ -327,7 +327,7 @@ export function Dashboard({ dashboardData, onStartGoal }: { dashboardData: Dashb
       { id: "card", w: 4, h: 2 },
       { id: "balance", w: 2, h: 2 },
       { id: "quick-actions", w: 2, h: 2 },
-      { id: "summary", w: 4, h: 1 },
+      { id: "summary", w: 4, h: 2 },
       ...widgets.map((w) => {
         const saved = savedSizes[w.widgetId];
         return {
@@ -342,17 +342,18 @@ export function Dashboard({ dashboardData, onStartGoal }: { dashboardData: Dashb
 
   const layout = useMemo(() => {
     const resolved = resolveLayout(items, savedPositions, COLS);
-    // Mientras se redimensiona, fijamos el tile en su posición original y
-    // mostramos el tamaño borrador; los demás tiles no se mueven.
+    // Compactamos (gravedad vertical) para que no queden huecos.
+    const compacted = compactLayout(resolved, items.map((item) => item.id));
+    // Mientras se redimensiona, fijamos el tile en su posición original.
     if (resizing && resizeDraft) {
-      resolved[resizing.id] = {
+      compacted[resizing.id] = {
         x: resizing.rect.x,
         y: resizing.rect.y,
         w: resizeDraft.w,
         h: resizeDraft.h,
       };
     }
-    return resolved;
+    return compacted;
   }, [items, savedPositions, resizing, resizeDraft]);
 
   layoutRef.current = layout;
@@ -453,14 +454,41 @@ export function Dashboard({ dashboardData, onStartGoal }: { dashboardData: Dashb
     if (dragged) {
       const { x, y } = cellFromPointer(e.clientX, e.clientY, dragged.w);
       const candidate: GridRect = { x, y, w: dragged.w, h: dragged.h };
-      const others = Object.entries(layout).filter(([id]) => id !== draggedId).map(([, r]) => r);
-      const valid = !others.some((r) => rectsOverlap(candidate, r));
-      if (valid) {
-        setSavedPositions((current) => {
-          const next = { ...current, [draggedId]: { x, y } };
-          window.localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(next));
-          return next;
-        });
+      const origin = layout[draggedId];
+
+      // Widgets del mismo tamaño que caen bajo el cursor: si hay exactamente
+      // uno, intercambiamos posiciones.
+      const swapTargets = items.filter((item) => {
+        if (item.id === draggedId) return false;
+        if (item.w !== dragged.w || item.h !== dragged.h) return false;
+        const rect = layout[item.id];
+        return rect ? rectsOverlap(candidate, rect) : false;
+      });
+
+      const swapTarget = swapTargets.length === 1 ? swapTargets[0] : undefined;
+      if (swapTarget && origin) {
+        const targetRect = layout[swapTarget.id];
+        if (targetRect) {
+          setSavedPositions((current) => {
+            const next = {
+              ...current,
+              [draggedId]: { x: targetRect.x, y: targetRect.y },
+              [swapTarget.id]: { x: origin.x, y: origin.y },
+            };
+            window.localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(next));
+            return next;
+          });
+        }
+      } else {
+        const others = Object.entries(layout).filter(([id]) => id !== draggedId).map(([, r]) => r);
+        const valid = !others.some((r) => rectsOverlap(candidate, r));
+        if (valid) {
+          setSavedPositions((current) => {
+            const next = { ...current, [draggedId]: { x, y } };
+            window.localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(next));
+            return next;
+          });
+        }
       }
     }
     setDraggedId(null);
@@ -578,7 +606,7 @@ export function Dashboard({ dashboardData, onStartGoal }: { dashboardData: Dashb
           if (item.id === "summary") {
             return (
               <Tile key={item.id} {...tileProps} title="Resumen del mes">
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, height: "100%" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12, height: "100%" }}>
                   {summaryComponents.map((c, index) => (
                     <div key={index} style={{ containerType: "inline-size", minWidth: 0 }}>
                       {renderAgentComponent(c)}

@@ -6,7 +6,7 @@ export function BreakdownChart({ component }: { component: ComponentOfType<"brea
   const max = Math.max(...component.segments.map((segment) => segment.value), 1);
 
   return (
-    <div style={{ border: "1px solid var(--line)", borderRadius: 16, padding: 16, display: "grid", gap: 12 }}>
+    <div style={{ border: "1px solid var(--line)", borderRadius: "var(--radius-inner)", padding: "var(--space-4)", display: "grid", gap: "var(--space-3)", height: "100%", alignContent: "start" }}>
       {component.title ? <strong style={{ color: "var(--ink)" }}>{component.title}</strong> : null}
       <div style={{ display: "grid", gap: 10 }}>
         {component.segments.map((segment) => {

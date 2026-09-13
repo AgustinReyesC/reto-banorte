@@ -28,6 +28,44 @@ export function findFirstOpenSpot(w: number, h: number, cols: number, placed: Gr
 }
 
 /**
+ * Compacta el layout (gravedad vertical): sube cada item lo más posible sin
+ * traslaparse, respetando su columna. Elimina huecos verticales para que el
+ * acomodo se vea ordenado.
+ */
+export function compactLayout(
+  layout: Record<string, GridRect>,
+  ids: string[]
+): Record<string, GridRect> {
+  const ordered = [...ids].sort((a, b) => {
+    const rectA = layout[a];
+    const rectB = layout[b];
+    if (!rectA || !rectB) return 0;
+    return rectA.y - rectB.y || rectA.x - rectB.x;
+  });
+
+  const placed: GridRect[] = [];
+  const result: Record<string, GridRect> = {};
+
+  for (const id of ordered) {
+    const rect = layout[id];
+    if (!rect) continue;
+
+    let y = rect.y;
+    while (y > 0) {
+      const candidate: GridRect = { ...rect, y: y - 1 };
+      if (placed.some((other) => rectsOverlap(candidate, other))) break;
+      y -= 1;
+    }
+
+    const next: GridRect = { ...rect, y };
+    placed.push(next);
+    result[id] = next;
+  }
+
+  return result;
+}
+
+/**
  * Resuelve la posición final de cada item: respeta la posición guardada si
  * sigue cabiendo sin traslape; si no (widget nuevo, o choque tras cambiar de
  * tamaño), lo acomoda en el primer hueco libre. Los items se procesan en

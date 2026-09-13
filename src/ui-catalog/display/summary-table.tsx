@@ -8,7 +8,7 @@ function formatCell(cell: string | number): string {
 
 export function SummaryTable({ component }: { component: ComponentOfType<"summary_table"> }) {
   return (
-    <div style={{ border: "1px solid var(--line)", borderRadius: 16, padding: 16, display: "grid", gap: 12, overflowX: "auto" }}>
+    <div style={{ border: "1px solid var(--line)", borderRadius: "var(--radius-inner)", padding: "var(--space-4)", display: "grid", gap: "var(--space-3)", overflowX: "auto", height: "100%", alignContent: "start" }}>
       {component.title ? <strong style={{ color: "var(--ink)" }}>{component.title}</strong> : null}
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
         <thead>

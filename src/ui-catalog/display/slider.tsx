@@ -13,7 +13,7 @@ export function Slider({
   const [value, setValue] = useState(component.defaultValue ?? component.min);
 
   return (
-    <div style={{ border: "1px solid var(--line)", borderRadius: 16, padding: 16, display: "grid", gap: 8 }}>
+    <div style={{ border: "1px solid var(--line)", borderRadius: "var(--radius-inner)", padding: "var(--space-4)", display: "grid", gap: "var(--space-2)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", color: "var(--ink)" }}>
         <strong>{component.label}</strong>
         <span style={{ color: "var(--garnet)", fontWeight: 700 }}>

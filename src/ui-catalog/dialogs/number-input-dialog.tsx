@@ -13,7 +13,7 @@ export function NumberInputDialog({
   const [value, setValue] = useState(component.defaultValue ?? component.min ?? 0);
 
   return (
-    <div style={{ border: "1px solid var(--line)", borderRadius: 16, padding: 16, display: "grid", gap: 12 }}>
+    <div style={{ border: "1px solid var(--line)", borderRadius: "var(--radius-inner)", padding: "var(--space-4)", display: "grid", gap: "var(--space-3)" }}>
       <label htmlFor={component.id} style={{ fontWeight: 700, color: "var(--ink)" }}>
         {component.label}
       </label>
